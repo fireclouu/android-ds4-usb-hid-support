@@ -12,9 +12,11 @@ Android native support for controllers mostly uses bluetooth, my DS4 battery is 
 I purchased fake one, f*ck i'm poor. It's PS4 OEM, still I want these to work with me, so here are the details:
 `DS4 CUH-ZCT2E Wireless Controller` as per written on the back of it
 
-> Image here Back of controller documented
-> 
-> Image here internal battery documented
+<img src="documentation/front.webp" width="500" />
+
+<img src="documentation/back.webp" width="700" />
+
+<img src="documentation/back-cover-pop.webp" width="500" />
 
 Note that I am aware that I can purchase battery online, I chose not to and try hard mode.
 
