@@ -10,7 +10,7 @@ Android native support for controllers mostly uses bluetooth, my DS4 battery is 
 # Device
 ## Controller
 I purchased fake one, f*ck i'm poor. It's PS4 OEM, still I want these to work with me, so here are the details:
-`DS4 CUH-ZCT2E Wireless Controller` as per written on the back of it, stating it has `800mA` but upon checking inside, these OEM uses only `600mA` battery, which again sucks.
+`DS4 CUH-ZCT2E Wireless Controller` as per written on the back of it
 
 > Image here Back of controller documented
 > 
@@ -405,6 +405,7 @@ This is still a work-in-progress project I may or may not continue, depending on
 - [kernel.org USB HID Report Descriptors](https://docs.kernel.org/hid/hidintro.html#output-input-and-feature-reports)
 - [torvalds/linux](https://github.com/torvalds/linux/tree/master)
 - [Game Controller Collective Wiki](https://controllers.fandom.com/wiki/Sony_DualShock_4)
+- [dsremap](https://dsremap.readthedocs.io/en/latest/reverse.html)
 - [Android kernel overview | AOSP](https://source.android.com/docs/core/architecture/kernel)
 - [Android source code](https://android.googlesource.com/kernel/common.git/+/brillo-m9-release/drivers/hid/hid-sony.c)
 - [the sz development for USB ID database](https://the-sz.com/products/usbid/)
