@@ -1,10 +1,8 @@
 # Android USB HID support for Dualshock 4 (a research Work-in-progress)
-Reverse-engineering study of how android handles USB HID connection with my personal Dualshock 4 device
+Reverse-engineering study of how android handles USB HID connection with my personal Dualshock 4 controller
 
 # I made it fun to read!
 Yes. I think. English is not my native language so there will be incorrect usage of words, prepositions, etc. and it might sound written in simple english, cause it is and my vocabulary is limited. I'll consult AI later for these, but for now, here is my full, non-translated grammar.
-
-> Sorry na, magiging magaling din ako sa mga susunod, or much better kung mai-translate rin ito sa Filipino kung kakayanin haha
 
 # Motivation
 Android native support for controllers mostly uses bluetooth, my DS4 battery is dying as of writing this README, it sucks to know my phone, Xiaomi Redmi series running `Android 15 build AQ3A.240912.001` or its kernel compiled won't work with USB. I want challenge, and i'll try to understand DS4's driver, and maybe write something that may benefit the community.
@@ -32,7 +30,7 @@ To make it easier for me, I'm using `Termux` and its compiled binaries available
 Let's enumerate USB devices connected by doing `dmesg | grep -i usb`
 ![Result Image](documentation/result-1.png)
 
-I don't know much of the output but I do know near the last line our fake controller is being read. It even mocks manufacturer identified as Sony-produced device.
+I don't know much of the output but I do know near the last line our fake controller is being read. It even replicates the manufacturer, identified as Sony-produced device.
 
 Other helpful information we extracted here is:
 `0003:054C:09CC.0234`
@@ -58,7 +56,7 @@ That's what I tell to myself too. So I plug another HIDclass USB and found these
 Now then, dmesg reads it as keyboard/mouse HID, but how did android decided that...
 > Android: hey this is a keyboard and mouse, i will consume your inputs and be useful
 
-Android, or its kernel which is linux-based, enumerated it as `Product: 2.4G Mouse` together with the vendor and product ID of which we have done it above and you can do so for yourself on this device if you want.
+Android, or its kernel which is linux-based, reports the USB plugged in as `Product: 2.4G Mouse` together with the vendor and product ID of which we have done it above and you can do so for yourself on this device if you want.
 
 But again, how did android decide that a HID is consumable? I tried full dmesg, and this is where I uncover what android wants to tell me in the first place
 
@@ -75,19 +73,21 @@ Setting aside about mouse and keyboard problem (we should come back to these lat
 <span style='color: green;'>[39975.372406]</span> <span style='color: orange;'>sony 0003:054C:09CC.0558:</span> <span style='color: red;'>failed to retrieve feature report 0x81 with the DualShock 4 MAC address</span>
 </span>
 
-...*feature report*, huh? digging deep I stumbled upon  .
+...*feature report*, huh?
 
-So i need to access the `report_descriptor` but remember that android likes to reconnect continuously? yeah I need to get the data FASTTT, before android kills the connection and do it again, as the ID increments for every failure, so i did `cat */*`
+Before we understand anything of these, some knowledge with USB devices, in our case USB HID, is a must and thankfully [docs.kernel.org's USB HID RD](https://docs.kernel.org/hid/hidintro.html) exist.
+
+Reading the docs, to be able to make sense of these report, a `report_descriptor` must be extracted to USB HID, but remember that android likes to reconnect continuously? I need to get the data as FAST AS POSSIBLE before android redo the connection, as the ID increments on every attempt, so I just did `cat */*`
 
 ![Android attempt read RD](documentation/android-attempt-read-rd.png)
 
-No `report_descriptor` being displayed. I'll use my linux PC to extract those.
+The `report_descriptor` appears not to load here. Let's try my x64 linux machine:
 
 ![Linux read RD](documentation/linux-read-rd.png)
 
-> Oh hey, tomorrow is 2026! Hapi new year ebriwan!!
+> Oh hey, tomorrow is 2026!
 
-Gotcha! Now, what does this do then? based on [docs.kernel.org's HID RD](https://docs.kernel.org/hid/hidintro.html) it is recommended to use existing parser. Thankfully there is an online one, so i just need to `hexdump -e '16/1 "%02x " "\n"' report_descriptor` and paste it on [USB Descriptor and Request parser page](https://eleccelerator.com/usbdescreqparser/) and parse it as **USB HID RD**:
+Gotcha! Now, what does this do then? based on [docs.kernel.org](https://docs.kernel.org/hid/hidintro.html) it is recommended to use existing parser. Thankfully there is an online one, so i just need to `hexdump -e '16/1 "%02x " "\n"' report_descriptor` and paste it on [USB Descriptor and Request parser page](https://eleccelerator.com/usbdescreqparser/) and parse it as **USB HID RD**:
 ```
 0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
 0x09, 0x05,        // Usage (Game Pad)
@@ -347,11 +347,9 @@ Gotcha! Now, what does this do then? based on [docs.kernel.org's HID RD](https:/
 
 **TOO MUCH DATA!!!**
 
- It's confusing to me and I don't have knowledge with USB descriptors, up until now. We should ingest those information slowly.
+It's confusing to me and I don't have knowledge with USB descriptors, up until now. We should ingest those information slowly.
 
-I'm no stranger handling hexadecimal shenanigans though. When writing my first emulator for `space invaders` which uses `intel 8080 cpu`, I exposed myself identifying memory addresses, instruction sets, and such. So, with these information above, having those knowledge really helps, well not most of those parts but the structure of what is parser outputted is.
-
-> Malapit na bagong taon, happy new year to me haha! Nice exercise rin pala gumawa ng dev. documentary paminsan-minasn.
+I'm no stranger working with hexadecimal notations though. When writing my first emulator for `space invaders` which uses `intel 8080 cpu`, I exposed myself identifying memory addresses, instruction sets, and such. So, with these information above, having those knowledge really helps, well not most of those parts but the structure of what is parser outputted is.
 
 What feature report are we failing again? Right, its `0x81` and the output tells us that:
 ```
@@ -359,14 +357,15 @@ What feature report are we failing again? Right, its `0x81` and the output tells
 0x85, 0x81,        //   Report ID (-127)
 0x09, 0x21,        //   Usage (0x21)
 0x95, 0x06,        //   Report Count (6)
-0xB1, 0x02,        //   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No 
+0xB1, 0x02,        //   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
 ...
 ```
 
 we can tell, again based on kernel.org, that this is a 'Feature' report, which is baked data on HID, and has `06h` data field, and what does a MAC address length for example?
+
 `00:11:22:AA:BB:CC`
 
-has six segment, ranging from `0h` up to `FFh`. This is just based on the reports given by android's `dmesg` 
+has six segments. We can assume this feature returns something related to MAC address due to the evidence on its RD, and thanks to community effort, upstream linux verifies that this feature **really is** returning a MAC address of the device. 
 
 I have to be sure that Android kernel really understand Sony's HID feature request. Looking at [Android kernel source](https://android.googlesource.com/kernel/common.git/+/brillo-m9-release/drivers/hid/hid-sony.c) we can verify on line `1789 - 1792`:
 
@@ -382,10 +381,13 @@ same dmesg error appears here.
 
 Why is this *kernel-thingy* important to me? well I still don't have ideas about `drivers` in full context, at first I assume that those errors are directly coming from `HID`, in our case the DS4 OEM, communicating with android but I can't accept the fact that the manufacturer, Sony, exposing their secrets freely by telling which feature request is failing, it must be reversed-engineered by someone and [I was right on that point!](https://dsremap.readthedocs.io/en/latest/reverse.html)
 
+## What's causing kernel driver on android's failed handoff then?
+
+
 # Are we there yet?
 Personally, there are things that is still not clear.
 - How does android kernel handle failing HID?
-  - Answer: android is strict. I still cannot prove it, I lacked android experience on low-level scenario like these, but we know how android operates and trim their code for security. I'll try to do my best though.
+  - Answer: android is strict. I still cannot prove it yet since my android experience working with low-level scenarios are limited, but we know how android operates and modifies their code for security purposes. I'll try to do my best though.
 - Is newer `Android API` supports USB HID comms on userspace
   - Answer: web says **yes** but the limitation is what I'm thinking of.
 - Do we need to patch the kernel?
@@ -398,3 +400,16 @@ Personally, there are things that is still not clear.
 I admit some of what I talked about here may not be accurate or completely incorrect. I appreciate community to discuss which part I fail and I'll respond as soon as possible!
 
 This is still a work-in-progress project I may or may not continue, depending on my mood and how life becomes for me. If you want to get in touch, use my email provided on profile, or invite me around Metro Manila, PH. I would love to talk and shed some ideas!
+
+# Resources
+- [kernel.org USB HID Report Descriptors](https://docs.kernel.org/hid/hidintro.html#output-input-and-feature-reports)
+- [torvalds/linux](https://github.com/torvalds/linux/tree/master)
+- [Game Controller Collective Wiki](https://controllers.fandom.com/wiki/Sony_DualShock_4)
+- [Android kernel overview | AOSP](https://source.android.com/docs/core/architecture/kernel)
+- [Android source code](https://android.googlesource.com/kernel/common.git/+/brillo-m9-release/drivers/hid/hid-sony.c)
+- [the sz development for USB ID database](https://the-sz.com/products/usbid/)
+- [DS4 Pairing | Playstation](https://www.playstation.com/en-us/support/hardware/ps4-pair-dualshock-4-wireless-with-pc-or-mac/)
+- [USB descriptor and request parser | eleccelerator.com](https://eleccelerator.com/usbdescreqparser/)
+
+> !NOTE
+> I'm writing these the day before 2026 arrive! Happy new year all!

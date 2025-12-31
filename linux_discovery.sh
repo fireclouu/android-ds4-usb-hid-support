@@ -1,0 +1,1 @@
+udevadm info -q all -n /dev/hidraw*
