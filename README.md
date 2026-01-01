@@ -47,13 +47,11 @@ This is identifier. Lets decode.
 
 the last `0234h` is my device's kernel which identifies it as its unique ID.
 
-TL;DR: my fake controller is being read on USB bus as Sony-produced wireless controller
-
 ## If that's the case, then why not android makes use of it? why mouse, also a HIDclass, being read but DS4 don't?
 That's what I tell to myself too. So I plug another HIDclass USB and found these:
 ![Some HIDClass](documentation/some-hidclass.png)
 
-> storytime first. I just got these mouse (the one on the screenshot) from a buy and sell page, and I just found out that it should also bundled with a keyboard too. But it was given to me for free, but doing these report I uncover that it should be a combo device haha.
+> Storytime! I just got these mouse (the one on the screenshot) from facebook marketplace, and I just found out that it should also bundled with a keyboard too. But it was given to me as freebie, and doing these report I uncover that it should be a combo device! 
 
 Now then, dmesg reads it as keyboard/mouse HID, but how did android decided that...
 > Android: hey this is a keyboard and mouse, i will consume your inputs and be useful
@@ -71,9 +69,9 @@ Side note: Android **is very determined to read these HID** since it loops on re
 
 Setting aside about mouse and keyboard problem (we should come back to these later on), first lets focus on the line where it says:
 
-<span style='font-family: monospace; background: #000000'>
-<span style='color: green;'>[39975.372406]</span> <span style='color: orange;'>sony 0003:054C:09CC.0558:</span> <span style='color: red;'>failed to retrieve feature report 0x81 with the DualShock 4 MAC address</span>
-</span>
+```
+[39975.372406] sony 0003:054C:09CC.0558: failed to retrieve feature report 0x81 with the DualShock 4 MAC address
+```
 
 ...*feature report*, huh?
 
@@ -383,7 +381,20 @@ same dmesg error appears here.
 
 Why is this *kernel-thingy* important to me? well I still don't have ideas about `drivers` in full context, at first I assume that those errors are directly coming from `HID`, in our case the DS4 OEM, communicating with android but I can't accept the fact that the manufacturer, Sony, exposing their secrets freely by telling which feature request is failing, it must be reversed-engineered by someone and [I was right on that point!](https://dsremap.readthedocs.io/en/latest/reverse.html)
 
+## Beginner's mistake
+
+Use a virtual machine!! Before I started these project, I'm confidently using my host Linux Mint machine for testing, and after realizing I'm installing too much libraries that will soon I'll forget to remove, and request for constant reboot, I just then realize the benefit of VM. Downloadeded  `Debian 13` ISO headless, USB redirected DS4, and migrated previous tests after setup and continue.
+
+## Communicating with DS4 HID
+
+
+
 ## What's causing kernel driver on android's failed handoff then?
+We first need to understand how `android kernel` works.
+
+Upon reading [Android kernel overview](https://source.android.com/docs/core/architecture/kernel), it uses `Linux LTS kernel`, combined with `Android Common Kernels` or ACKs. In short, android modifies the superset upstream Linux kernels for its needs. ACKs are built from `kernel/common` repo, as the article says and this is where we also got the [hid_sony.c](https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/drivers/hid/hid-sony.c) driver source code.
+
+What can we prove right now is that, we are interested in driver came from `Linux kernel` maintained in `LTS release`, an upstream of `ACKs`, of which `RN8` device with `LineageOS` shipped with `GKI` which handles our problematic behavior we're currently investigating. Jeez, so much of android information.
 
 
 # Are we there yet?
@@ -401,7 +412,7 @@ Personally, there are things that is still not clear.
 # Conclusion
 I admit some of what I talked about here may not be accurate or completely incorrect. I appreciate community to discuss which part I fail and I'll respond as soon as possible!
 
-This is still a work-in-progress project I may or may not continue, depending on my mood and how life becomes for me. If you want to get in touch, use my email provided on profile, or invite me around Metro Manila, PH. I would love to talk and shed some ideas!
+This is still a work-in-progress project I may or may not continue, depending on my mood and how life becomes for me. If you want to get in touch, use my email provided on profile, or invite me around Metro Manila, PH 🇵🇭. I would love to talk and shed some ideas!
 
 # Resources
 - [kernel.org USB HID Report Descriptors](https://docs.kernel.org/hid/hidintro.html#output-input-and-feature-reports)
@@ -414,5 +425,5 @@ This is still a work-in-progress project I may or may not continue, depending on
 - [DS4 Pairing | Playstation](https://www.playstation.com/en-us/support/hardware/ps4-pair-dualshock-4-wireless-with-pc-or-mac/)
 - [USB descriptor and request parser | eleccelerator.com](https://eleccelerator.com/usbdescreqparser/)
 
-> !NOTE
+> [!NOTE]
 > I'm writing these the day before 2026 arrive! Happy new year all!
