@@ -1,4 +1,4 @@
-# Android USB HID support for Dualshock 4 (a research Work-in-progress)
+# Android USB HID support for Dualshock 4 for (kernel lower than 6.x) (a research Work-in-progress)
 Reverse-engineering study of how android handles USB HID connection with my personal Dualshock 4 controller
 
 # I made it fun to read!
