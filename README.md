@@ -409,8 +409,19 @@ Personally, there are things that is still not clear.
 - How do you intend to do it?
   - Answer: **trial and error method**, on technical side, I'm prepping myself to write basic magisk module that will do these if possible, or modify `hid-sony.c` code i don't really know at this point in time.
 
+# Will it took long time?
+Yeah on my skill-level right now. But everytime, I improve myself. Also here's some techical facts:
+
+We are talking about Android here, specifically we're tinkering the kernel, and unlike linux PC, I still figure out how to dynamically load module on it. Found out in debian we can just rebuild a module instead of entire kernel, opposite to how android operates which comes with `pre-compiled kernel`. What I need to accomplish is for android to ignore default kernel kicking in, we can't do `modprobe` blocking like how we can do it easily on desktop Linux distros.
+
+What's happening is that, my Android kernel I have on my device right now, ships with a driver that can read DS4, but unlike latest kernel `6.x`, below it don't have full support to DS4 features. Also, >=`5.1x` introduces `hid_playstation` driver, optimized and better driver than `hid_sony` for DS4.
+
+As of writing (January 2026), most current android kernel is at `5.10.x`, depending on phone manufacturer for updates. And my `RN8` is still at `4.14.xxx`. This project might be beneficial for older models, and for us too who wants to study about android itself and its kernel, and driver implementations.
+
+I can just wait for an update, hoping kernel too will increment but unlikely with the manufacturer.
+
 # Conclusion
-I admit some of what I talked about here may not be accurate or completely incorrect. I appreciate community to discuss which part I fail and I'll respond as soon as possible!
+Some of what I talked about here may not be accurate or completely incorrect. I appreciate community to discuss which part I fail and I'll respond as soon as possible!
 
 This is still a work-in-progress project I may or may not continue, depending on my mood and how life becomes for me. If you want to get in touch, use my email provided on profile, or invite me around Metro Manila, PH 🇵🇭. I would love to talk and shed some ideas!
 
