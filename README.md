@@ -25,6 +25,9 @@ My daily driver phone i'm using is `Xiaomi Redmi Note 13 Pro 5G` which is bootlo
 
 So I end up using my other phone `Redmi Note 8` (we will call it `RN8` up to this point) with `LineageOS 22.2-20250618` running `Android 15` and this is a `rooted` phone so I can easily tinker with its USB bus capabilities relying on `Android SDK` just to read USB content, and also I'm afraid those `API` may be limited for us to use. We will be using official SDK later, if possible on these project, but for now, we take easier route.
 
+## Latitude 5300 (i5-8th gen low power)
+Nice laptop. Can spin multiple VMs. Installed additional 8GB RAM (many thanks to PUP Quezon City student who offered me cheap RAM) and I really felt the difference.
+
 # Preparation
 To make it easier for me, I'm using `Termux` and its compiled binaries available for `root` operations. Also, thanks to `ssh` I can just work with my PC seamlessly without too much of wired connection to the device `RN8`.
 
@@ -48,10 +51,10 @@ This is identifier. Lets decode.
 the last `0234h` is my device's kernel which identifies it as its unique ID.
 
 ## If that's the case, then why not android makes use of it? why mouse, also a HIDclass, being read but DS4 don't?
-That's what I tell to myself too. So I plug another HIDclass USB and found these:
+I plug another HIDclass USB and found these:
 ![Some HIDClass](documentation/some-hidclass.png)
 
-> Storytime! I just got these mouse (the one on the screenshot) from facebook marketplace, and I just found out that it should also bundled with a keyboard too. But it was given to me as freebie, and doing these report I uncover that it should be a combo device! 
+> Quick background: I just got these mouse (the one on the screenshot) from facebook marketplace, and I just found out that it should also bundled with a keyboard too. But it was given to me as freebie, and doing these report I uncover that it should be a combo device! 
 
 Now then, dmesg reads it as keyboard/mouse HID, but how did android decided that...
 > Android: hey this is a keyboard and mouse, i will consume your inputs and be useful
@@ -63,7 +66,7 @@ But again, how did android decide that a HID is consumable? I tried full dmesg, 
 Plugging DS4 Controller 
 ![Full dmesg dualshock4](documentation/full-dmesg-dualshock4.png)
 
-Side note: Android **is very determined to read these HID** since it loops on reading it as soon as it fails to read. I took notice of it too physically since the **controller** won't stop the light flashing, I thought maybe android just charging its battery as soon as it fails, but nope! You can see the evidence here:
+Android **is determined to read the device**, it loops on reading it as soon as driver fails to bind. I took notice of it too physically since the **controller** won't stop the light flashing, I thought maybe android just charging its battery as soon as it fails.
 
 ![Android is curious](documentation/android-is-curious.png)
 
@@ -396,6 +399,8 @@ Upon reading [Android kernel overview](https://source.android.com/docs/core/arch
 
 What can we prove right now is that, we are interested in driver came from `Linux kernel` maintained in `LTS release`, an upstream of `ACKs`, of which `RN8` device with `LineageOS` shipped with `GKI` which handles our problematic behavior we're currently investigating. Jeez, so much of android information.
 
+# Fix
+## Userspace API + Root
 
 # Are we there yet?
 Personally, there are things that is still not clear.
@@ -407,7 +412,7 @@ Personally, there are things that is still not clear.
   - Answer: **yes?** if that is the case then I'm f*cked, firstly I still don't touch kernel code, heck I don't know how to build simple one (but I wanna learn), and with the resource I have right now, compiling Android kernel seems to be a slow path to me.
   - And also, if it is a **kernel-based solution**, how can I transfer that to my daily driver then? I think if that's the case then we'll wait for android to just do their magic then.
 - How do you intend to do it?
-  - Answer: **trial and error method**, on technical side, I'm prepping myself to write basic magisk module that will do these if possible, or modify `hid-sony.c` code i don't really know at this point in time.
+  - Answer: **trial and error method**, on technical side, I'm preparing myself to write basic magisk module that will do these if possible, or modify `hid-sony.c` code i don't really know at this point in time.
 
 # Will it took long time?
 Yeah on my skill-level right now. But everytime, I improve myself. Also here's some techical facts:
@@ -419,6 +424,42 @@ What's happening is that, my Android kernel I have on my device right now, ships
 As of writing (January 2026), most current android kernel is at `5.10.x`, depending on phone manufacturer for updates. And my `RN8` is still at `4.14.xxx`. This project might be beneficial for older models, and for us too who wants to study about android itself and its kernel, and driver implementations.
 
 I can just wait for an update, hoping kernel too will increment but unlikely with the manufacturer.
+
+# Linux...
+
+We need to work with kernel, I'm interested on linux kernel version `4.14` since my `RN8` uses that kernel version and before we do that on Android, I want to try it first on a linux desktop. I need to compile a kernel myself. I'm using `Debian 13`.
+
+Building linux kernel is straight to the point. I just customize CPU core and `Makefile` does the rest. Nice!
+
+![building 4.14](documentation/building-4.14.png)
+
+And after tinkering with makefile and waiting for my PC cooking our kernel...
+![built 4.14](documentation/built-4.14.png)
+
+```
+Found linux image: /boot/vmlinuz-4.14.333
+Found initrd image: /boot/initrd.img-4.14.333
+```
+
+GRUB founds our old kernel! I'll try to use these kernel see if it works...
+
+![Debian 13 kernel attempt 1](documentation/debian13-kernel-attempt1.png)
+
+Wow. That takes me for 1 and a half of hour to build these kernel, and it won't boot. Some CPU features I need to disable... and we need to rebuild it again.
+
+That's painful. Why not just one driver? But if I want to replicate the environment of `4.14`, then this is the best way...
+
+Second attempt took another hour and... 
+![built 4.14 CPU feat](documentation/built-4.14-cpu-feat.png)
+
+Yeahh! that workss! Now the moment of truth if we can blame `4.14` linux kernel:
+![built 4.14 CPU feat](documentation/mainline-4.14-fails-sony.png)
+
+Okay I did NOT expect that. I thought due to ACKs patches that is why android fails to consume my DS4, but even mainline linux kernel cannot read DS4 HID!
+
+Now what does this tells us? it is that newer kernel version improves support to DS4 and what we just need to do is to `backport` those compatible kernel down to the lower kernel version. This is only just for kernel-based solution but if it works, still is an achievement.
+
+I based on a tested linux kernel `6.12.63`, which my controller works flawlessly, and a backport challenge to `4.14.333` , included on this repository.
 
 # Conclusion
 Some of what I talked about here may not be accurate or completely incorrect. I appreciate community to discuss which part I fail and I'll respond as soon as possible!
