@@ -1,16 +1,16 @@
-# Android USB HID support for Dualshock 4 (kernel lower than 6.x) (a research Work-in-progress)
-Reverse-engineering study of how android handles USB HID connection with my personal Dualshock 4 controller
+# Android USB HID support for Dualshock 4 (kernel lower than 6.x ) (a research Work-in-progress)
+Attempt to backport newer Sony-provided kernel driver for dualshock 4 and recompiling to Android kernel.
 
-# I made it fun to read!
-Yes. I think. English is not my native language so there will be incorrect usage of words, prepositions, etc. and it might sound written in simple english, cause it is and my vocabulary is limited. I'll consult AI later for these, but for now, here is my full, non-translated grammar.
+# Introduction
+There will be incorrect usage of words, prepositions, etc. as english isn't my native language, and it might sound written in simple english, cause it is and my vocabulary is limited. I'll consult AI later for these, but for now, here is my full, non-translated grammar.
 
 # Motivation
-Android native support for controllers mostly uses bluetooth, my DS4 battery is dying as of writing this README, it sucks to know my phone, Xiaomi Redmi series running `Android 15 build AQ3A.240912.001` or its kernel compiled won't work with USB. I want challenge, and i'll try to understand DS4's driver, and maybe write something that may benefit the community.
+Old android device with lower kernel version only support DS4 for bluetooth connection (as generic gamepad HID), my DS4 battery is dying as of writing, and doesn't recognize on USB connection. We will try to understand how old DS4's driver interacts with, and attempt to do kernel patch that enable backport support for latest kernel driver.
 
 # Device
 ## Controller
-I purchased fake one, f*ck i'm poor. It's PS4 OEM, still I want these to work with me, so here are the details:
-`DS4 CUH-ZCT2E Wireless Controller` as per written on the back of it
+Purchased PS4 OEM, a copy, I want these to work wired, details below:
+`DS4 CUH-ZCT2E Wireless Controller` as per written
 
 <img src="documentation/front.webp" width="500" />
 
@@ -18,37 +18,37 @@ I purchased fake one, f*ck i'm poor. It's PS4 OEM, still I want these to work wi
 
 <img src="documentation/back-cover-pop.webp" width="500" />
 
-Note that I am aware that I can purchase battery online, I chose not to and try hard mode.
+I am aware that I can purchase battery online, I chose not to and try hard mode.
 
 ## Android device/s
-My daily driver phone i'm using is `Xiaomi Redmi Note 13 Pro 5G` which is bootloader-locked as of writing, and I have no intention for now to break it due to stuffs relate to office and bank transaction. Those apps hates android's `Developer mode` turned on too :( 
+My daily driver, `Xiaomi Redmi Note 13 Pro 5G`, is bootloader-locked as of writing, and I have no intention for now to break it due to stuffs relate to office and bank transaction. Those apps hates android's `Developer mode` turned on too :( 
 
-So I end up using my other phone `Redmi Note 8` (we will call it `RN8` up to this point) with `LineageOS 22.2-20250618` running `Android 15` and this is a `rooted` phone so I can easily tinker with its USB bus capabilities relying on `Android SDK` just to read USB content, and also I'm afraid those `API` may be limited for us to use. We will be using official SDK later, if possible on these project, but for now, we take easier route.
+So I end up using my other phone `Redmi Note 8` (we will call it `RN8` up to this point) with `LineageOS 22.2-20250618` running `Android 15`, kernel version `4.14`, and this is `rooted` so we can easily tinker with its internals easily. We will be using userspace API later, if possible, but for now, we take easier route.
 
 ## Latitude 5300 (i5-8th gen low power)
-Nice laptop. Can spin multiple VMs. Installed additional 8GB RAM (many thanks to PUP Quezon City student who offered me cheap RAM) and I really felt the difference.
+Nice laptop. Can spin multiple VMs. 16GB RAM.
 
 # Preparation
-To make it easier for me, I'm using `Termux` and its compiled binaries available for `root` operations. Also, thanks to `ssh` I can just work with my PC seamlessly without too much of wired connection to the device `RN8`.
+My choice of terminal is `Termux`, it ships with pre-built packages required for us to work with the device, especially if we need privilege mode. Remote connection handled via `ssh` for flexibility.
 
 # Findings
-Let's enumerate USB devices connected by doing `dmesg | grep -i usb`
+Let's run `dmesg | grep -i usb` see what we can uncover
 ![Result Image](documentation/result-1.png)
 
-I don't know much of the output but I do know near the last line our fake controller is being read. It even replicates the manufacturer, identified as Sony-produced device.
+I don't know much of the output but I do know near the last line is our controller being detected.
 
 Other helpful information we extracted here is:
 `0003:054C:09CC.0234`
 
-This is identifier. Lets decode.
+Decoding this identifier we got:
 
 `03h` means its a *HIDclass*, refer [here](https://learn.microsoft.com/en-us/windows-hardware/drivers/usbcon/supported-usb-classes)
 
 `054Ch` means our vendor is *Sony Group Corporation*, refer [here](https://the-sz.com/products/usbid/index.php?v=054C&p=&n=)
 
-`09CCh` means the product ID (PID) is our lovely mocked *Dualshock4 [CUH-ZCT2x]*, refer [here](https://the-sz.com/products/usbid/index.php?v=054C&p=&n=)
+`09CCh` means the product ID (PID) is  *Dualshock4 [CUH-ZCT2x]*, refer [here](https://the-sz.com/products/usbid/index.php?v=054C&p=&n=)
 
-the last `0234h` is my device's kernel which identifies it as its unique ID.
+the last `0234h` is my device's internal unqiue kernel identifier.
 
 ## If that's the case, then why not android makes use of it? why mouse, also a HIDclass, being read but DS4 don't?
 I plug another HIDclass USB and found these:
@@ -59,18 +59,12 @@ I plug another HIDclass USB and found these:
 Now then, dmesg reads it as keyboard/mouse HID, but how did android decided that...
 > Android: hey this is a keyboard and mouse, i will consume your inputs and be useful
 
-Android, or its kernel which is linux-based, reports the USB plugged in as `Product: 2.4G Mouse` together with the vendor and product ID of which we have done it above and you can do so for yourself on this device if you want.
+Android, or its kernel which is linux-based, identifies new device via Vendor ID (VID) and Product ID (PID) of which we have done it above and you can do so for yourself on this device if you want.
 
 But again, how did android decide that a HID is consumable? I tried full dmesg, and this is where I uncover what android wants to tell me in the first place
 
 Plugging DS4 Controller 
 ![Full dmesg dualshock4](documentation/full-dmesg-dualshock4.png)
-
-Android **is determined to read the device**, it loops on reading it as soon as driver fails to bind. I took notice of it too physically since the **controller** won't stop the light flashing, I thought maybe android just charging its battery as soon as it fails.
-
-![Android is curious](documentation/android-is-curious.png)
-
-Setting aside about mouse and keyboard problem (we should come back to these later on), first lets focus on the line where it says:
 
 ```
 [39975.372406] sony 0003:054C:09CC.0558: failed to retrieve feature report 0x81 with the DualShock 4 MAC address
@@ -78,9 +72,9 @@ Setting aside about mouse and keyboard problem (we should come back to these lat
 
 ...*feature report*, huh?
 
-Before we understand anything of these, some knowledge with USB devices, in our case USB HID, is a must and thankfully [docs.kernel.org's USB HID RD](https://docs.kernel.org/hid/hidintro.html) exist.
+Before we understand anything of these, we must have some knowledge with USB devices, in our case USB HID, and thankfully [docs.kernel.org's USB HID RD](https://docs.kernel.org/hid/hidintro.html) is publicly available.
 
-Reading the docs, to be able to make sense of these report, a `report_descriptor` must be extracted to USB HID, but remember that android likes to reconnect continuously? I need to get the data as FAST AS POSSIBLE before android redo the connection, as the ID increments on every attempt, so I just did `cat */*`
+Reading the docs, a `report_descriptor` must be extracted to USB HID, but remember that android likes to reconnect continuously? I need to get the data as FAST AS POSSIBLE before android redo the connection, as the ID increments on every attempt, so I just did `cat */*`
 
 ![Android attempt read RD](documentation/android-attempt-read-rd.png)
 
@@ -90,7 +84,7 @@ The `report_descriptor` appears not to load here. Let's try my x64 linux machine
 
 > Oh hey, tomorrow is 2026!
 
-Gotcha! Now, what does this do then? based on [docs.kernel.org](https://docs.kernel.org/hid/hidintro.html) it is recommended to use existing parser. Thankfully there is an online one, so i just need to `hexdump -e '16/1 "%02x " "\n"' report_descriptor` and paste it on [USB Descriptor and Request parser page](https://eleccelerator.com/usbdescreqparser/) and parse it as **USB HID RD**:
+Gotcha! Now, what does this do then? based on [docs.kernel.org](https://docs.kernel.org/hid/hidintro.html) it is recommended to use existing parser. Apparently, there exists online parser. Running `hexdump -e '16/1 "%02x " "\n"' report_descriptor` and paste it on [USB Descriptor and Request parser page](https://eleccelerator.com/usbdescreqparser/) and parse it as **USB HID RD**:
 ```
 0x05, 0x01,        // Usage Page (Generic Desktop Ctrls)
 0x09, 0x05,        // Usage (Game Pad)
@@ -389,7 +383,6 @@ Why is this *kernel-thingy* important to me? well I still don't have ideas about
 Use a virtual machine!! Before I started these project, I'm confidently using my host Linux Mint machine for testing, and after realizing I'm installing too much libraries that will soon I'll forget to remove, and request for constant reboot, I just then realize the benefit of VM. Downloadeded  `Debian 13` ISO headless, USB redirected DS4, and migrated previous tests after setup and continue.
 
 ## Communicating with DS4 HID
-
 
 
 ## What's causing kernel driver on android's failed handoff then?
