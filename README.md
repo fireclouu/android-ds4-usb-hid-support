@@ -2,14 +2,14 @@
 Attempt to backport newer Sony-provided kernel driver for dualshock 4 and recompiling to Android kernel.
 
 # Introduction
-There will be incorrect usage of words, prepositions, etc. as english isn't my native language, and it might sound written in simple english, cause it is and my vocabulary is limited. I'll consult AI later for these, but for now, here is my full, non-translated grammar.
+There will be incorrect usage of words, prepositions, etc. as english isn't my native language, and it might sound written in simple english, cause it is and my vocabulary is limited. I'll consult AI later for these, but for now, here is my research.
 
 # Motivation
-Old android device with lower kernel version only support DS4 for bluetooth connection (as generic gamepad HID), my DS4 battery is dying as of writing, and doesn't recognize on USB connection. We will try to understand how old DS4's driver interacts with, and attempt to do kernel patch that enable backport support for latest kernel driver.
+Android devices with kernel version `4.14.x` only supports DS4 but only on bluetooth connection (as generic gamepad HID), my DS4 controller battery is dying as of writing, and doesn't recognize on USB connection due to unsupported kernel. We will try to understand how early Sony's DS4 controller driver implementation interacts with device, and attempt to create simple patches or backport support working on latest linux kernels (based on LTS kernel v5.1x.x and higher).
 
 # Device
 ## Controller
-Purchased PS4 OEM, a copy, I want these to work wired, details below:
+Purchased DS4 OEM controller, a copy, I want these to work wired, details below:
 `DS4 CUH-ZCT2E Wireless Controller` as per written
 
 <img src="documentation/front.webp" width="500" />
@@ -18,18 +18,19 @@ Purchased PS4 OEM, a copy, I want these to work wired, details below:
 
 <img src="documentation/back-cover-pop.webp" width="500" />
 
-I am aware that I can purchase battery online, I chose not to and try hard mode.
+I know I can just purchase battery for it, but I chose not to and try hard mode.
 
 ## Android device/s
-My daily driver, `Xiaomi Redmi Note 13 Pro 5G`, is bootloader-locked as of writing, and I have no intention for now to break it due to stuffs relate to office and bank transaction. Those apps hates android's `Developer mode` turned on too :( 
+My daily driver, `Xiaomi Redmi Note 13 Pro 5G` (which is on kernel version `5.10.236` still don't have proper support for DS4 controller plugged via USB), codename `garnet`, is bootloader-locked as of writing, and I have no intention for now to break it due to stuffs related to office and bank transaction. Those apps hates android's `Developer mode` turned on too :(
 
-So I end up using my other phone `Redmi Note 8` (we will call it `RN8` up to this point) with `LineageOS 22.2-20250618` running `Android 15`, kernel version `4.14`, and this is `rooted` so we can easily tinker with its internals easily. We will be using userspace API later, if possible, but for now, we take easier route.
+So I end up using my other phone `Redmi Note 8` (we will call it `RN8` up to this point) running `LineageOS 22.2-20250618`, ships with kernel version `4.14`. It's important to mention we already provided *superuser* privilege to it thanks to community effort, so we can tinker this device more easily if needed.
 
 ## Latitude 5300 (i5-8th gen low power)
-Nice laptop. Can spin multiple VMs. 16GB RAM.
+Nice laptop. Can spin multiple VMs. 16GB RAM. Uses Linux Mint.
 
 # Preparation
-My choice of terminal is `Termux`, it ships with pre-built packages required for us to work with the device, especially if we need privilege mode. Remote connection handled via `ssh` for flexibility.
+- `RN8` has `Termux` installed. It ships with pre-built packages required for us to work with device if needed. Remote connection handled with `ssh`.
+- We will be using `Debian 13` via VM, then compile kernel `4.x` and use it so we can emulate similar environment how `RN8` drivers currently shipped.
 
 # Findings
 Let's run `dmesg | grep -i usb` see what we can uncover
@@ -40,7 +41,7 @@ I don't know much of the output but I do know near the last line is our controll
 Other helpful information we extracted here is:
 `0003:054C:09CC.0234`
 
-Decoding this identifier we got:
+Decoding this identifier:
 
 `03h` means its a *HIDclass*, refer [here](https://learn.microsoft.com/en-us/windows-hardware/drivers/usbcon/supported-usb-classes)
 
@@ -48,7 +49,7 @@ Decoding this identifier we got:
 
 `09CCh` means the product ID (PID) is  *Dualshock4 [CUH-ZCT2x]*, refer [here](https://the-sz.com/products/usbid/index.php?v=054C&p=&n=)
 
-the last `0234h` is my device's internal unqiue kernel identifier.
+the last `0234h` is `RN8` unique ID the kernel provided. Differs on every device.
 
 ## If that's the case, then why not android makes use of it? why mouse, also a HIDclass, being read but DS4 don't?
 I plug another HIDclass USB and found these:
@@ -78,7 +79,7 @@ Reading the docs, a `report_descriptor` must be extracted to USB HID, but rememb
 
 ![Android attempt read RD](documentation/android-attempt-read-rd.png)
 
-The `report_descriptor` appears not to load here. Let's try my x64 linux machine:
+The `report_descriptor` appears not to load here. Let's try on our Linux PC:
 
 ![Linux read RD](documentation/linux-read-rd.png)
 
@@ -364,7 +365,7 @@ we can tell, again based on kernel.org, that this is a 'Feature' report, which i
 
 has six segments. We can assume this feature returns something related to MAC address due to the evidence on its RD, and thanks to community effort, upstream linux verifies that this feature **really is** returning a MAC address of the device. 
 
-I have to be sure that Android kernel really understand Sony's HID feature request. Looking at [Android kernel source](https://android.googlesource.com/kernel/common.git/+/brillo-m9-release/drivers/hid/hid-sony.c) we can verify on line `1789 - 1792`:
+Looking at [Android kernel source](https://android.googlesource.com/kernel/common.git/+/brillo-m9-release/drivers/hid/hid-sony.c) we can verify on line `1789 - 1792`:
 
 ```c
 if (ret != 7) {
@@ -375,12 +376,7 @@ if (ret != 7) {
 
 same dmesg error appears here. 
 
-
-Why is this *kernel-thingy* important to me? well I still don't have ideas about `drivers` in full context, at first I assume that those errors are directly coming from `HID`, in our case the DS4 OEM, communicating with android but I can't accept the fact that the manufacturer, Sony, exposing their secrets freely by telling which feature request is failing, it must be reversed-engineered by someone and [I was right on that point!](https://dsremap.readthedocs.io/en/latest/reverse.html)
-
-## Beginner's mistake
-
-Use a virtual machine!! Before I started these project, I'm confidently using my host Linux Mint machine for testing, and after realizing I'm installing too much libraries that will soon I'll forget to remove, and request for constant reboot, I just then realize the benefit of VM. Downloadeded  `Debian 13` ISO headless, USB redirected DS4, and migrated previous tests after setup and continue.
+I'm just a rookie at this point. I thought that message comes directly on USB device passing on OS, but why a proprietary device do that? That's a silly idea.
 
 ## Communicating with DS4 HID
 
@@ -390,43 +386,46 @@ We first need to understand how `android kernel` works.
 
 Upon reading [Android kernel overview](https://source.android.com/docs/core/architecture/kernel), it uses `Linux LTS kernel`, combined with `Android Common Kernels` or ACKs. In short, android modifies the superset upstream Linux kernels for its needs. ACKs are built from `kernel/common` repo, as the article says and this is where we also got the [hid_sony.c](https://android.googlesource.com/kernel/common/+/refs/heads/android-mainline/drivers/hid/hid-sony.c) driver source code.
 
-What can we prove right now is that, we are interested in driver came from `Linux kernel` maintained in `LTS release`, an upstream of `ACKs`, of which `RN8` device with `LineageOS` shipped with `GKI` which handles our problematic behavior we're currently investigating. Jeez, so much of android information.
+What can we prove right now is that, we are interested in driver came from `Linux kernel` maintained in `LTS release`, an upstream of `ACKs`, of which `RN8` device with `LineageOS` shipped with `GKI` which handles our problematic behavior we're currently investigating. Learning how android OS operates under the hood is very interesting.
 
 # Fix
 ## Userspace API + Root
 
 # Are we there yet?
 Personally, there are things that is still not clear.
-- How does android kernel handle failing HID?
-  - Answer: android is strict. I still cannot prove it yet since my android experience working with low-level scenarios are limited, but we know how android operates and modifies their code for security purposes. I'll try to do my best though.
-- Is newer `Android API` supports USB HID comms on userspace
-  - Answer: web says **yes** but the limitation is what I'm thinking of.
+- Can we do these patch fix work without touching kernel? like using only android-provided API which is on user-space?
+  - Answer: Maybe. Well this problem only exist for kernels (that I've tested) lower than `5.10.xxx`. I'm not so sure but depending on how device's android SDK version exposes `USB API`, that's the limitation.
 - Do we need to patch the kernel?
-  - Answer: **yes?** if that is the case then I'm f*cked, firstly I still don't touch kernel code, heck I don't know how to build simple one (but I wanna learn), and with the resource I have right now, compiling Android kernel seems to be a slow path to me.
-  - And also, if it is a **kernel-based solution**, how can I transfer that to my daily driver then? I think if that's the case then we'll wait for android to just do their magic then.
+  - Answer: This is the practical way at first. We need to do proof-of-concept before improving something, or at least that's how I plan it initially. We can be so sure this will work since this just need a software fix, specifically updating kernel driver. I don't really work writing driver but with these, it makes me curious how does hardware talks to other hardware with underlying software.
 - How do you intend to do it?
-  - Answer: **trial and error method**, on technical side, I'm preparing myself to write basic magisk module that will do these if possible, or modify `hid-sony.c` code i don't really know at this point in time.
+  - Answer: **trial and error method**, on technical side, I'm preparing myself to understand kernel implementation and how reading state of HIDs are happening on those drivers, like a hello world but with extra step.
+- Can I setup virtual machine which emulates ARM devices + android so I can work with it easily?
+  - Answer: This is *Android Virtual Devices*, which is bundled officially on *Android Studio*. So yes. But since I'm working on kernel and not some user-space application, I currently don't have idea building kernel and using it to boot device, for now. Also, since we like to work as close as what `RN8` environment, we emulate ARM. My `Latitude 5300` might not like that.
+
+# What we learn so far...
+- Linux kernel `4.14.xxx` does not have complete implementation for DS4 to work with USB. This is confirmed when I use it on `Debian 13` running `4.14.xxx` kernel version.
+- Android is true to the upstream, either no or minimal configuration change to `hid-sony.c` shipped on kernel `4.14.xxx`
+- Sony [*officially maintains*](https://web.archive.org/web/20260201152500/https://www.phoronix.com/news/Sony-HID-PlayStation-PS5) linux kernel driver for playstation controllers.
+- 
 
 # Will it took long time?
 Yeah on my skill-level right now. But everytime, I improve myself. Also here's some techical facts:
 
-We are talking about Android here, specifically we're tinkering the kernel, and unlike linux PC, I still figure out how to dynamically load module on it. Found out in debian we can just rebuild a module instead of entire kernel, opposite to how android operates which comes with `pre-compiled kernel`. What I need to accomplish is for android to ignore default kernel kicking in, we can't do `modprobe` blocking like how we can do it easily on desktop Linux distros.
+We are talking about Android here, specifically we're tinkering the kernel, and unlike linux desktops, I still figure out how to dynamically load module on it. In linux desktops we can just rebuild module instead of entire kernel, opposite to how android which boots with `pre-compiled kernel`. What I need to accomplish is to inject our modified kernel on-the-fly, we can't do `modprobe` blocking like how we can do it easily on desktop Linux distros.
 
-What's happening is that, my Android kernel I have on my device right now, ships with a driver that can read DS4, but unlike latest kernel `6.x`, below it don't have full support to DS4 features. Also, >=`5.1x` introduces `hid_playstation` driver, optimized and better driver than `hid_sony` for DS4.
+My `RN8` already reached its `end of life support` long ago, so I don't expect update from manufacturer. My `garnet` is also stuck at `5.10.x` as of writing (February 2026), and also may not be able to get major kernel version update. 
 
-As of writing (January 2026), most current android kernel is at `5.10.x`, depending on phone manufacturer for updates. And my `RN8` is still at `4.14.xxx`. This project might be beneficial for older models, and for us too who wants to study about android itself and its kernel, and driver implementations.
-
-I can just wait for an update, hoping kernel too will increment but unlikely with the manufacturer.
+This project is beneficial for older models with kernels lower than `5.10.x`, and for us too who wants to study about android itself, its internals, and driver implementations.
 
 # Linux...
 
 We need to work with kernel, I'm interested on linux kernel version `4.14` since my `RN8` uses that kernel version and before we do that on Android, I want to try it first on a linux desktop. I need to compile a kernel myself. I'm using `Debian 13`.
 
-Building linux kernel is straight to the point. I just customize CPU core and `Makefile` does the rest. Nice!
+Building linux kernel is straightforward thanks to Linus' philosophy. Single `Makefile` does the rest. Nice!
 
 ![building 4.14](documentation/building-4.14.png)
 
-And after tinkering with makefile and waiting for my PC cooking our kernel...
+And after tinkering, and waiting for my PC to cook our kernel...
 ![built 4.14](documentation/built-4.14.png)
 
 ```
@@ -434,11 +433,11 @@ Found linux image: /boot/vmlinuz-4.14.333
 Found initrd image: /boot/initrd.img-4.14.333
 ```
 
-GRUB founds our old kernel! I'll try to use these kernel see if it works...
+GRUB founds our newly built old kernel! I'll try to use these, see if it works...
 
 ![Debian 13 kernel attempt 1](documentation/debian13-kernel-attempt1.png)
 
-Wow. That takes me for 1 and a half of hour to build these kernel, and it won't boot. Some CPU features I need to disable... and we need to rebuild it again.
+Wow. That takes me for 1 and a half of hour of building, and it won't boot. Some CPU features I need to disable... and we need to do it again.
 
 That's painful. Why not just one driver? But if I want to replicate the environment of `4.14`, then this is the best way...
 
@@ -448,16 +447,16 @@ Second attempt took another hour and...
 Yeahh! that workss! Now the moment of truth if we can blame `4.14` linux kernel:
 ![built 4.14 CPU feat](documentation/mainline-4.14-fails-sony.png)
 
-Okay I did NOT expect that. I thought due to ACKs patches that is why android fails to consume my DS4, but even mainline linux kernel cannot read DS4 HID!
+This mainline linux kernel also reports similar result as what we got with android.
 
-Now what does this tells us? it is that newer kernel version improves support to DS4 and what we just need to do is to `backport` those compatible kernel down to the lower kernel version. This is only just for kernel-based solution but if it works, still is an achievement.
+So its clear to us now that we need to do `backport` of compatible driver found in kernels `6.x.x`, reimplementing it making it compatible to lower linux kernel version.
 
-I based on a tested linux kernel `6.12.63`, which my controller works flawlessly, and a backport challenge to `4.14.333` , included on this repository.
+I based on a tested linux kernel `6.12.63`, which my controller works flawlessly, and a backport challenge to `4.14.333`, included on this repository.
 
 # Conclusion
 Some of what I talked about here may not be accurate or completely incorrect. I appreciate community to discuss which part I fail and I'll respond as soon as possible!
 
-This is still a work-in-progress project I may or may not continue, depending on my mood and how life becomes for me. If you want to get in touch, use my email provided on profile, or invite me around Metro Manila, PH 🇵🇭. I would love to talk and shed some ideas!
+This is still a work-in-progress project I may or may not continue, depending on my mood and how life becomes for me. If you want to get in touch, use my email provided on profile, or invite me around Metro Manila, PH. I would love to talk and shed some ideas!
 
 # Resources
 - [kernel.org USB HID Report Descriptors](https://docs.kernel.org/hid/hidintro.html#output-input-and-feature-reports)
